@@ -24,11 +24,21 @@ class Env():
         # If config.LAYERS changes size, we need to adapt self.d_values list.
         
         self.num_layers = len(config.LAYERS)
-        self.d_values = [30.0] * self.num_layers # Default start
+        # Initial thicknesses 
+        # Support N layers dynamically based on config.LAYERS
+        self.num_layers = len(config.LAYERS)
+        self.d_values = []
         
-        # Map specific defaults if 6 layers (standard case)
-        if self.num_layers == 6:
-             self.d_values = [25.0, 10.0, 25.0, 150.0, 30.0, 30.0]
+        # Initialize within bounds (e.g., midpoint or random)
+        for i in range(self.num_layers):
+            key = f"d{i+1}"
+            min_b, max_b = config.BOUNDS.get(key, (10, 100))
+            # Start at random point or specific if logic exists
+            # Let's start at a "safe" random point
+            val = float(np.random.randint(min_b, max_b + 1))
+            self.d_values.append(val)
+            
+        # For backward compatibility with main.py logging that accesses env.d1p etc.
 
         # For backward compatibility with main.py logging that accesses env.d1p etc.
         # We will use property getters or just set attributes effectively.

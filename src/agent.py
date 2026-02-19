@@ -50,9 +50,9 @@ class ReplayBuffer():
         
         # Check validity based on NEXT STATE (where we ended up)
         valid = True
-        keys = ["d1", "d2", "d3", "d4", "d5", "d6"]
+        keys = config.ACTION_CATEGORIES # ["d1", "d2", ... ] dynamic
         
-        # next_state is expected to be [d1p, d2p, d3p, d4p, d5p, d6p]
+        # next_state is expected to be [d1p, d2p, ...]
         for i, key in enumerate(keys):
             min_b, max_b = config.BOUNDS[key]
             val = next_state[i]

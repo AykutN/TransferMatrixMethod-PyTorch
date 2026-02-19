@@ -30,7 +30,10 @@ def main():
     # Create CSV headers if files don't exist (overwrite mode for fresh start)
     with open(training_log_path, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(["Episode", "Step", "d1p", "d2p", "d3p", "d4p", "d5p", "d6p", "AVT", "JPH", "CRI", "x", "y", "Reward", "Action"])
+        # Dynamic headers for D values
+        d_headers = [f"d{i+1}p" for i in range(config.STATE_DIM)]
+        headers = ["Episode", "Step"] + d_headers + ["AVT", "JPH", "CRI", "x", "y", "Reward", "Action"]
+        writer.writerow(headers)
         
     with open(loss_log_path, 'w', newline='') as f:
         writer = csv.writer(f)
@@ -68,13 +71,14 @@ def main():
                 action = agent.select_action(state)
                 next_state, reward, done = env.step(action)
                 
-                d1p, d2p, d3p, d4p, d5p, d6p = env.d1p, env.d2p, env.d3p, env.d4p, env.d5p, env.d6p
+                # Dynamic D values
+                d_vals = env.d_values
                 
                 # Prepare log entry
                 log_entry = [
-                    episode + 1, step + 1,
-                    d1p, d2p, d3p, d4p, d5p, d6p,
-                    env.avt_value, env.jph_value,
+                    episode + 1, step + 1] + \
+                    d_vals + \
+                    [env.avt_value, env.jph_value,
                     getattr(env, 'cri_value', 0.0), getattr(env, 'x_value', 0.0), getattr(env, 'y_value', 0.0),
                     reward,
                     env.action_space[action]
@@ -112,7 +116,8 @@ def main():
                 writer = csv.writer(f)
                 writer.writerow([episode + 1, total_reward])
                 
-            print(f"Ep {episode+1}/{config.EPISODES} | Reward: {total_reward:>7.2f} | AVT: {env.avt_value:>5.2f} | JPH: {env.jph_value:>5.2f} | CRI: {getattr(env, 'cri_value', 0.0):>5.2f} | x: {getattr(env, 'x_value', 0.0):.4f} | y: {getattr(env, 'y_value', 0.0):.4f} | D: [{env.d1p:5.1f}, {env.d2p:5.1f}, {env.d3p:5.1f}, {env.d4p:5.1f}, {env.d5p:5.1f}, {env.d6p:5.1f}]")
+            d_str = ", ".join([f"{v:5.1f}" for v in env.d_values])
+            print(f"Ep {episode+1}/{config.EPISODES} | Reward: {total_reward:>7.2f} | AVT: {env.avt_value:>5.2f} | JPH: {env.jph_value:>5.2f} | CRI: {getattr(env, 'cri_value', 0.0):>5.2f} | x: {getattr(env, 'x_value', 0.0):.4f} | y: {getattr(env, 'y_value', 0.0):.4f} | D: [{d_str}]")
             
             # Save model occasionally
             if (episode + 1) % 50 == 0:
