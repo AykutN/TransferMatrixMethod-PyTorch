@@ -30,7 +30,7 @@ def main():
     # Create CSV headers if files don't exist (overwrite mode for fresh start)
     with open(training_log_path, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(["Episode", "Step", "d1p", "d2p", "d3p", "d4p", "d5p", "d6p", "AVT", "JPH", "Reward", "Action"])
+        writer.writerow(["Episode", "Step", "d1p", "d2p", "d3p", "d4p", "d5p", "d6p", "AVT", "JPH", "CRI", "x", "y", "Reward", "Action"])
         
     with open(loss_log_path, 'w', newline='') as f:
         writer = csv.writer(f)
@@ -75,6 +75,7 @@ def main():
                     episode + 1, step + 1,
                     d1p, d2p, d3p, d4p, d5p, d6p,
                     env.avt_value, env.jph_value,
+                    getattr(env, 'cri_value', 0.0), getattr(env, 'x_value', 0.0), getattr(env, 'y_value', 0.0),
                     reward,
                     env.action_space[action]
                 ]
@@ -111,7 +112,7 @@ def main():
                 writer = csv.writer(f)
                 writer.writerow([episode + 1, total_reward])
                 
-            print(f"Ep {episode+1}/{config.EPISODES} | Reward: {total_reward:>7.2f} | AVT: {env.avt_value:>5.2f} | JPH: {env.jph_value:>5.2f} | D: [{env.d1p:5.1f}, {env.d2p:5.1f}, {env.d3p:5.1f}, {env.d4p:5.1f}, {env.d5p:5.1f}, {env.d6p:5.1f}]")
+            print(f"Ep {episode+1}/{config.EPISODES} | Reward: {total_reward:>7.2f} | AVT: {env.avt_value:>5.2f} | JPH: {env.jph_value:>5.2f} | CRI: {getattr(env, 'cri_value', 0.0):>5.2f} | x: {getattr(env, 'x_value', 0.0):.4f} | y: {getattr(env, 'y_value', 0.0):.4f} | D: [{env.d1p:5.1f}, {env.d2p:5.1f}, {env.d3p:5.1f}, {env.d4p:5.1f}, {env.d5p:5.1f}, {env.d6p:5.1f}]")
             
             # Save model occasionally
             if (episode + 1) % 50 == 0:

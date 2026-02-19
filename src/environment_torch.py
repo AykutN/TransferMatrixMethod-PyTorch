@@ -43,6 +43,9 @@ class Env():
         self.current_step = 0
         self.previous_avt = self.avt_value
         self.previous_jph = self.jph_value
+        
+        # Extended metrics initialized by _get_location
+        # self.cri_value, self.x_value, self.y_value are now available
 
     def cleanup(self):
         pass # No MATLAB engine to close
@@ -68,10 +71,21 @@ class Env():
 
     def _get_location(self, *d_vals):
         # Call PyTorch TMM
-        # It handles float inputs and returns float (item())
-        avt, jph = self.tmm.forward(*d_vals)
+        # Returns: AVT, Jph, CRI_ext, x_cr, y_cr
+        avt, jph, cri, x, y = self.tmm.forward(*d_vals)
+        
+        # Convert to python floats
         if hasattr(avt, 'item'): avt = avt.item()
         if hasattr(jph, 'item'): jph = jph.item()
+        if hasattr(cri, 'item'): cri = cri.item()
+        if hasattr(x, 'item'): x = x.item()
+        if hasattr(y, 'item'): y = y.item()
+        
+        # Store extended metrics
+        self.cri_value = cri
+        self.x_value = x
+        self.y_value = y
+        
         return avt, jph
 
     def reset(self):
