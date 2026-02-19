@@ -105,4 +105,4 @@ BOUNDS = {
 The engine has been validated against established Transfer Matrix Method implementations. Discrepancies in `Jph` are negligible (< 0.01%) and attributed to differences in interpolation methods between SciPy and MATLAB. `AVT` calculations are mathematically identical.
 
 ## 📝 License
-[MIT License](LICENSE)
+[GNU GPL V3.0 License]
