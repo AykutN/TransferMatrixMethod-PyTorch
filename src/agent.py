@@ -41,12 +41,12 @@ class ReplayBuffer():
         self.alpha = alpha
         # REMOVED: self.env = env.Env()  <-- This was the performance killer
 
-    def store(self, state, action, reward, next_state, done, avt_value, highest_avt, jph_value, highest_jph):
+    def store(self, state, action, reward, next_state, done, A_value, highest_A, B_value, highest_B):
         state = np.array(state) if not isinstance(state, np.ndarray) else state
         next_state = np.array(next_state) if not isinstance(next_state, np.ndarray) else next_state
 
-        self.highest_avt = highest_avt
-        self.highest_jph = highest_jph
+        self.highest_A = highest_A
+        self.highest_B = highest_B
         
         # Check validity based on NEXT STATE (where we ended up)
         valid = True
@@ -62,10 +62,10 @@ class ReplayBuffer():
 
         priority=0
         if valid:
-            if avt_value > 25 and jph_value > self.highest_jph:
+            if A_value > 25 and B_value > self.highest_B:
                 priority += 20
-            if avt_value > 25:
-                # Assuming this logic is intended to boost "good" AVT states
+            if A_value > 25:
+                # Assuming this logic is intended to boost "good" A states
                 priority += 10
         else:
             priority -= 10

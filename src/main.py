@@ -32,7 +32,7 @@ def main():
         writer = csv.writer(f)
         # Dynamic headers for D values
         d_headers = [f"d{i+1}p" for i in range(config.STATE_DIM)]
-        headers = ["Episode", "Step"] + d_headers + ["AVT", "JPH", "CRI", "x", "y", "Reward", "Action"]
+        headers = ["Episode", "Step"] + d_headers + ["A", "B", "CRI", "x", "y", "Reward", "Action"]
         writer.writerow(headers)
         
     with open(loss_log_path, 'w', newline='') as f:
@@ -78,7 +78,7 @@ def main():
                 log_entry = [
                     episode + 1, step + 1] + \
                     d_vals + \
-                    [env.avt_value, env.jph_value,
+                    [env.A_value, env.B_value,
                     getattr(env, 'cri_value', 0.0), getattr(env, 'x_value', 0.0), getattr(env, 'y_value', 0.0),
                     reward,
                     env.action_space[action]
@@ -86,7 +86,7 @@ def main():
                 episode_step_logs.append(log_entry)
 
                 agent.buffer.store(state, action, reward, next_state, done, 
-                                   env.avt_value, env.highest_avt, env.jph_value, env.highest_jph)
+                                   env.A_value, env.highest_A, env.B_value, env.highest_B)
                 
                 loss = agent.train()
                 if loss is not None:
@@ -117,7 +117,7 @@ def main():
                 writer.writerow([episode + 1, total_reward])
                 
             d_str = ", ".join([f"{v:5.1f}" for v in env.d_values])
-            print(f"Ep {episode+1}/{config.EPISODES} | Reward: {total_reward:>7.2f} | AVT: {env.avt_value:>5.2f} | JPH: {env.jph_value:>5.2f} | CRI: {getattr(env, 'cri_value', 0.0):>5.2f} | x: {getattr(env, 'x_value', 0.0):.4f} | y: {getattr(env, 'y_value', 0.0):.4f} | D: [{d_str}]")
+            print(f"Ep {episode+1}/{config.EPISODES} | Reward: {total_reward:>7.2f} | AVT: {env.A_value:>5.2f} | Jph: {env.B_value:>5.2f} | CRI: {getattr(env, 'cri_value', 0.0):>5.2f} | x: {getattr(env, 'x_value', 0.0):.4f} | y: {getattr(env, 'y_value', 0.0):.4f} | D: [{d_str}]")
             
             # Save model occasionally
             if (episode + 1) % 50 == 0:

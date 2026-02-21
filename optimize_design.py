@@ -44,7 +44,7 @@ def optimize_structure():
     d_header = ', '.join([f'd{i+1}' for i in range(num_layers)])
     print(f"\n[3/4] Starting Optimization Loop...")
     print("-" * 80)
-    print(f"{'Step':<5} | {'AVT':<10} | {'Jph':<10} | {'Reward':<10} | Thicknesses ({d_header})")
+    print(f"{'Step':<5} | {'A':<10} | {'B':<10} | {'Reward':<10} | Thicknesses ({d_header})")
     print("-" * 80)
     
     history = []
@@ -64,15 +64,15 @@ def optimize_structure():
                 d_params.data[i].clamp_(lo, hi)
         
         # Forward pass through differentiable TMM
-        avt, jph, cri, x_cr, y_cr = tmm.forward(d_params)
+        a, b, cri, x_cr, y_cr = tmm.forward(d_params)
         
-        # Loss: Maximize Jph subject to AVT >= 25%
-        target_avt = 25.0
-        avt_violation = torch.relu(target_avt - avt)
+        # Loss: Maximize B subject to A >= 25%
+        target_a = 25.0
+        a_violation = torch.relu(target_a - a)
         penalty_weight = 10.0 
-        penalty = penalty_weight * (avt_violation ** 2)
+        penalty = penalty_weight * (a_violation ** 2)
         
-        reward = jph - penalty
+        reward = b - penalty
         loss = -reward 
         
         loss.backward()
@@ -88,7 +88,7 @@ def optimize_structure():
             
         if step % 10 == 0:
             d_numpy = d_params.detach().cpu().numpy().round(1)
-            print(f"{step:<5} | {avt.item():<10.2f} | {jph.item():<10.2f} | {current_reward:<10.2f} | {d_numpy}")
+            print(f"{step:<5} | {a.item():<10.2f} | {b.item():<10.2f} | {current_reward:<10.2f} | {d_numpy}")
             
     total_time = time.time() - start_time
     
@@ -103,13 +103,17 @@ def optimize_structure():
     best_d = best_design.cpu().numpy()
     
     with torch.no_grad():
-        b_avt, b_jph, b_cri, b_x, b_y = tmm.forward(*best_design)
+        b_a, b_b, b_cri, b_x, b_y = tmm.forward(*best_design)
         
-    print(f"  AVT : {b_avt.item():.2f} %")
-    print(f"  Jph : {b_jph.item():.2f} mA/cm²")
+    print(f"  A : {b_a.item():.2f} %")
+    print(f"  B : {b_b.item():.2f} mA/cm²")
     print(f"  CRI : {b_cri.item():.1f}")
     print(f"  x   : {b_x.item():.4f}")
     print(f"  y   : {b_y.item():.4f}")
+    if b_a is not None:
+        print(f"  A   : {b_a}")
+    if b_b is not None:
+        print(f"  B   : {b_b}")
     print("-" * 40)
     print("  Optimal Thicknesses:")
     for i in range(num_layers):

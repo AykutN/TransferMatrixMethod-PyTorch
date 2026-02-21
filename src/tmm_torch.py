@@ -26,7 +26,7 @@ class TMMTorch:
         self.wL = torch.linspace(self.wavelength_min, self.wavelength_max, self.pts, dtype=torch.float64, device=self.device) * 1e-6
         self.wL_micron = self.wL * 1e6
         
-        # Load Spectral References (AVT, Jph)
+        # Load Spectral References (A, B)
         self._load_references()
         
         # Preload Materials (Cache)
@@ -59,7 +59,7 @@ class TMMTorch:
         self.CMF_Y = torch.tensor(f_y(wL_np), dtype=torch.float64, device=self.device)
         self.CMF_Z = torch.tensor(f_z(wL_np), dtype=torch.float64, device=self.device)
         
-        # Precompute constants for AVT
+        # Precompute constants for A
         # PS = S_AM15G * V_RHE
         self.PS = self.S_AM15G * self.V_RHE
         self.PS[torch.isnan(self.PS)] = 0
@@ -590,7 +590,7 @@ class TMMTorch:
         
         R, T = self.tmm_transfer(layer_mats, thicks, angle=0)
         
-        # AVT
+        # A
         # PST = PS .* T_tot
         PST = self.PS * T
         PST[torch.isnan(PST)] = 0
@@ -600,13 +600,13 @@ class TMMTorch:
         # Calculate Color Metrics (CRI, x, y)
         CRI_ext, x_cr, y_cr = self.calculate_color_metrics(T)
         
-        # Jph (Short Circuit Current)
+        # B (Short Circuit Current)
         # Using exact formula from calculationTMMforPython.m:
-        # Jph = (1/(h*c))*trapz(wL*1E9, A_tot.*S_AM15G)*100*1E-9
+        # B = (1/(h*c))*trapz(wL*1E9, A_tot.*S_AM15G)*100*1E-9
         
-        A = 1.0 - R - T
-        Jph_integrant = A * self.S_AM15G
-        Jph_integrant[torch.isnan(Jph_integrant)] = 0.0
+        A_tot = 1.0 - R - T
+        B_integrant = A_tot * self.S_AM15G
+        B_integrant[torch.isnan(B_integrant)] = 0.0
         
         # Constants from MATLAB code
         h = 4.13566766225e-15 # eV s
@@ -615,7 +615,7 @@ class TMMTorch:
         # Integral
         # trapz requires explicit x if dx is not 1. wL is non-uniform? No, linspace.
         # But let's be safe and use x=self.wL*1e9
-        integral = torch.trapz(Jph_integrant, self.wL * 1e9)
+        integral = torch.trapz(B_integrant, self.wL * 1e9)
         
         Jph = (1/(h*c)) * integral * 100 * 1e-9
         

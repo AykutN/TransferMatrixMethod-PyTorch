@@ -3,7 +3,7 @@
 Multi-Objective Gradient-Based Pareto Optimization for Thin-Film Optoelectronic Devices.
 
 Uses Weighted Chebyshev Scalarization with the differentiable TMM engine to generate
-Pareto-optimal trade-off surfaces for AVT vs Jph, subject to CRI and chromaticity constraints.
+Pareto-optimal trade-off surfaces for A vs B, subject to CRI and chromaticity constraints.
 
 This replaces traditional evolutionary algorithms (e.g., NSGA-II) with gradient-based methods,
 achieving 10–100x faster Pareto front generation.
@@ -64,15 +64,15 @@ def is_pareto_optimal(costs):
 # ───────────────────────────────────────────────────────
 
 def optimize_single_weight(
-    tmm, w_avt, w_jph, utopia_avt, utopia_jph,
+    tmm, w_a, w_b, utopia_a, utopia_b,
     num_restarts=5, steps=200, lr=2.0,
-    avt_min=None, avt_max=None, cri_min=None,
+    a_min=None, a_max=None, cri_min=None,
     penalty_weight=20.0, device='cpu'
 ):
     """
     Solve a single weighted Chebyshev subproblem:
-        min  max{ w_avt * |AVT - utopia_avt|, w_jph * |Jph - utopia_jph| }
-        s.t. AVT ∈ [avt_min, avt_max], CRI ≥ cri_min (soft constraints)
+        min  max{ w_a * |A - utopia_a|, w_b * |B - utopia_b| }
+        s.t. A ∈ [a_min, a_max], CRI ≥ cri_min (soft constraints)
     
     Uses multi-restart to avoid local minima.
     
@@ -104,28 +104,28 @@ def optimize_single_weight(
                     d_params.data[i].clamp_(lo, hi)
             
             # Forward pass through differentiable TMM
-            avt, jph, cri, x_cr, y_cr = tmm.forward(d_params)
+            a, b, cri, x_cr, y_cr = tmm.forward(d_params)
             
             # ── Chebyshev Scalarization ──
-            # We want to MAXIMIZE both AVT and Jph, so the "distance" from utopia
+            # We want to MAXIMIZE both A and B, so the "distance" from utopia
             # is (utopia - actual). We minimize the max weighted distance.
-            dist_avt = (utopia_avt - avt)  # positive means below utopia
-            dist_jph = (utopia_jph - jph)
+            dist_a = (utopia_a - a)  # positive means below utopia
+            dist_b = (utopia_b - b)
             
             chebyshev = torch.max(
-                w_avt * dist_avt,
-                w_jph * dist_jph
+                w_a * dist_a,
+                w_b * dist_b
             )
             
             # ── Constraint Penalties ──
             penalty = torch.tensor(0.0, dtype=torch.float64, device=device)
             
-            if avt_min is not None:
-                violation = torch.relu(avt_min - avt)
+            if a_min is not None:
+                violation = torch.relu(a_min - a)
                 penalty = penalty + penalty_weight * violation ** 2
             
-            if avt_max is not None:
-                violation = torch.relu(avt - avt_max)
+            if a_max is not None:
+                violation = torch.relu(a - a_max)
                 penalty = penalty + penalty_weight * violation ** 2
             
             if cri_min is not None:
@@ -142,11 +142,11 @@ def optimize_single_weight(
         with torch.no_grad():
             for i, (lo, hi) in enumerate(bounds_list):
                 d_params.data[i].clamp_(lo, hi)
-            avt_f, jph_f, cri_f, x_f, y_f = tmm.forward(d_params)
+            a_f, b_f, cri_f, x_f, y_f = tmm.forward(d_params)
         
         final_cheby = max(
-            w_avt * (utopia_avt - avt_f.item()),
-            w_jph * (utopia_jph - jph_f.item())
+            w_a * (utopia_a - a_f.item()),
+            w_b * (utopia_b - b_f.item())
         )
         
         if final_cheby < best_chebyshev:
@@ -154,13 +154,15 @@ def optimize_single_weight(
             thicknesses = d_params.detach().cpu().numpy().copy()
             best_result = {
                 'thicknesses': thicknesses,
-                'AVT': avt_f.item(),
-                'Jph': jph_f.item(),
+                'A': a_f.item(),
+                'B': b_f.item(),
                 'CRI': cri_f.item(),
                 'x': x_f.item(),
                 'y': y_f.item(),
-                'w_avt': w_avt,
-                'w_jph': w_jph,
+                'A': a_f.item() if hasattr(a_f, 'item') else a_f,
+                'B': b_f.item() if hasattr(b_f, 'item') else b_f,
+                'w_a': w_a,
+                'w_b': w_b,
                 'chebyshev': float(final_cheby),
             }
     
@@ -173,17 +175,17 @@ def optimize_single_weight(
 
 def estimate_utopia(tmm, num_restarts=10, steps=300, lr=2.0, device='cpu'):
     """
-    Estimate the utopia point by individually maximizing AVT and Jph.
-    The utopia point is the (max_AVT, max_Jph) and is generally infeasible,
+    Estimate the utopia point by individually maximizing A and B.
+    The utopia point is the (max_A, max_B) and is generally infeasible,
     but serves as the reference for Chebyshev scalarization.
     """
     num_layers = len(config.LAYERS)
     bounds_list = [config.BOUNDS[f"d{i+1}"] for i in range(num_layers)]
     
-    best_avt = -float('inf')
-    best_jph = -float('inf')
+    best_a = -float('inf')
+    best_b = -float('inf')
     
-    for objective in ['avt', 'jph']:
+    for objective in ['a', 'b']:
         for _ in range(num_restarts):
             init_d = [np.random.uniform(lo, hi) for lo, hi in bounds_list]
             d_params = torch.tensor(init_d, dtype=torch.float64, device=device, requires_grad=True)
@@ -195,12 +197,12 @@ def estimate_utopia(tmm, num_restarts=10, steps=300, lr=2.0, device='cpu'):
                     for i, (lo, hi) in enumerate(bounds_list):
                         d_params.data[i].clamp_(lo, hi)
                 
-                avt, jph, cri, x_cr, y_cr = tmm.forward(d_params)
+                a, b, cri, x_cr, y_cr = tmm.forward(d_params)
                 
-                if objective == 'avt':
-                    loss = -avt
+                if objective == 'a':
+                    loss = -a
                 else:
-                    loss = -jph
+                    loss = -b
                 
                 loss.backward()
                 optimizer.step()
@@ -208,14 +210,14 @@ def estimate_utopia(tmm, num_restarts=10, steps=300, lr=2.0, device='cpu'):
             with torch.no_grad():
                 for i, (lo, hi) in enumerate(bounds_list):
                     d_params.data[i].clamp_(lo, hi)
-                avt_f, jph_f, _, _, _ = tmm.forward(d_params)
+                a_f, b_f, _, _, _ = tmm.forward(d_params)
             
-            if objective == 'avt':
-                best_avt = max(best_avt, avt_f.item())
+            if objective == 'a':
+                best_a = max(best_a, a_f.item())
             else:
-                best_jph = max(best_jph, jph_f.item())
+                best_b = max(best_b, b_f.item())
     
-    return best_avt, best_jph
+    return best_a, best_b
 
 
 # ───────────────────────────────────────────────────────
@@ -227,15 +229,15 @@ def run_pareto_optimization(
     num_restarts=5,
     steps=200,
     lr=2.0,
-    avt_min=None,
-    avt_max=None,
+    a_min=None,
+    a_max=None,
     cri_min=None,
     penalty_weight=20.0,
     output_dir=None,
     device='cpu'
 ):
     """
-    Generate the Pareto front for AVT vs Jph using gradient-based
+    Generate the Pareto front for A vs B using gradient-based
     Weighted Chebyshev Scalarization.
     """
     if output_dir is None:
@@ -250,7 +252,7 @@ def run_pareto_optimization(
     print(f"  Weight vectors: {num_weights}")
     print(f"  Restarts/weight: {num_restarts}")
     print(f"  Steps/restart : {steps}")
-    print(f"  AVT constraint: [{avt_min}, {avt_max}]")
+    print(f"  A constraint: [{a_min}, {a_max}]")
     print(f"  CRI constraint: ≥ {cri_min}")
     print("-" * 70)
     
@@ -261,30 +263,30 @@ def run_pareto_optimization(
     # 2. Estimate Utopia Point
     print("[2/4] Estimating Utopia Point (individual optima)...")
     t0 = time.time()
-    utopia_avt, utopia_jph = estimate_utopia(
+    utopia_a, utopia_b = estimate_utopia(
         tmm, num_restarts=max(3, num_restarts), steps=steps, lr=lr, device=device
     )
     # Add a small margin to ensure the utopia is strictly better
-    utopia_avt *= 1.05
-    utopia_jph *= 1.05
-    print(f"  Utopia Point: AVT* = {utopia_avt:.2f}%, Jph* = {utopia_jph:.2f} mA/cm²")
+    utopia_a *= 1.05
+    utopia_b *= 1.05
+    print(f"  Utopia Point: A* = {utopia_a:.2f}%, B* = {utopia_b:.2f} mA/cm²")
     print(f"  (Estimated in {time.time() - t0:.1f}s)")
     
     # 3. Generate Weight Vectors and Solve Subproblems
     print(f"\n[3/4] Solving {num_weights} Chebyshev subproblems...")
     
-    # Weight vectors: w_avt from 0.01 to 0.99 (avoid pure extremes)
-    weights_avt = np.linspace(0.01, 0.99, num_weights)
-    weights_jph = 1.0 - weights_avt
+    # Weight vectors: w_a from 0.01 to 0.99 (avoid pure extremes)
+    weights_a = np.linspace(0.01, 0.99, num_weights)
+    weights_b = 1.0 - weights_a
     
     all_results = []
     t0 = time.time()
     
-    for idx, (w_a, w_j) in enumerate(zip(weights_avt, weights_jph)):
+    for idx, (w_a, w_j) in enumerate(zip(weights_a, weights_b)):
         result = optimize_single_weight(
-            tmm, w_a, w_j, utopia_avt, utopia_jph,
+            tmm, w_a, w_j, utopia_a, utopia_b,
             num_restarts=num_restarts, steps=steps, lr=lr,
-            avt_min=avt_min, avt_max=avt_max, cri_min=cri_min,
+            a_min=a_min, a_max=a_max, cri_min=cri_min,
             penalty_weight=penalty_weight, device=device
         )
         all_results.append(result)
@@ -292,8 +294,8 @@ def run_pareto_optimization(
         if (idx + 1) % max(1, num_weights // 10) == 0 or idx == 0:
             elapsed = time.time() - t0
             eta = elapsed / (idx + 1) * (num_weights - idx - 1)
-            print(f"  [{idx+1}/{num_weights}] AVT={result['AVT']:.2f}%, "
-                  f"Jph={result['Jph']:.2f} mA/cm², CRI={result['CRI']:.1f} "
+            print(f"  [{idx+1}/{num_weights}] A={result['A']:.2f}%, "
+                  f"B={result['B']:.2f} mA/cm², CRI={result['CRI']:.1f} "
                   f"| Elapsed: {elapsed:.0f}s, ETA: {eta:.0f}s")
     
     total_time = time.time() - t0
@@ -308,27 +310,29 @@ def run_pareto_optimization(
         row = {}
         for i in range(num_layers):
             row[f'd{i+1}'] = r['thicknesses'][i]
-        row['AVT'] = r['AVT']
-        row['Jph'] = r['Jph']
+        row['A'] = r['A']
+        row['B'] = r['B']
         row['CRI'] = r['CRI']
         row['x'] = r['x']
         row['y'] = r['y']
-        row['w_avt'] = r['w_avt']
-        row['w_jph'] = r['w_jph']
+        row['A'] = r['A']
+        row['B'] = r['B']
+        row['w_a'] = r['w_a']
+        row['w_b'] = r['w_b']
         rows.append(row)
     
     df_all = pd.DataFrame(rows)
     
-    # Non-dominated sort (minimize negative AVT, negative Jph → maximize both)
-    costs = np.column_stack([-df_all['AVT'].values, -df_all['Jph'].values])
+    # Non-dominated sort (minimize negative A, negative B → maximize both)
+    costs = np.column_stack([-df_all['A'].values, -df_all['B'].values])
     pareto_mask = is_pareto_optimal(costs)
     
     df_pareto = df_all[pareto_mask].copy()
-    df_pareto = df_pareto.sort_values('AVT').reset_index(drop=True)
+    df_pareto = df_pareto.sort_values('A').reset_index(drop=True)
     
     # Remove duplicate designs (within tolerance)
-    df_pareto = df_pareto.round({'AVT': 2, 'Jph': 2, 'CRI': 1}).drop_duplicates(
-        subset=['AVT', 'Jph'], keep='first'
+    df_pareto = df_pareto.round({'A': 2, 'B': 2, 'CRI': 1}).drop_duplicates(
+        subset=['A', 'B'], keep='first'
     ).reset_index(drop=True)
     
     # Save outputs
@@ -345,8 +349,8 @@ def run_pareto_optimization(
     print(f"  Total time     : {total_time:.1f} seconds")
     print(f"  Total solutions: {len(df_all)}")
     print(f"  Pareto-optimal : {len(df_pareto)}")
-    print(f"  AVT range      : [{df_pareto['AVT'].min():.2f}%, {df_pareto['AVT'].max():.2f}%]")
-    print(f"  Jph range      : [{df_pareto['Jph'].min():.2f}, {df_pareto['Jph'].max():.2f}] mA/cm²")
+    print(f"  A range      : [{df_pareto['A'].min():.2f}%, {df_pareto['A'].max():.2f}%]")
+    print(f"  B range      : [{df_pareto['B'].min():.2f}, {df_pareto['B'].max():.2f}] mA/cm²")
     print(f"  CRI range      : [{df_pareto['CRI'].min():.1f}, {df_pareto['CRI'].max():.1f}]")
     print("-" * 70)
     print(f"  All solutions → {all_csv}")
@@ -354,13 +358,13 @@ def run_pareto_optimization(
     print("=" * 70)
     
     # Dominance quality check
-    avt_vals = df_pareto['AVT'].values
-    jph_vals = df_pareto['Jph'].values
+    a_vals = df_pareto['A'].values
+    b_vals = df_pareto['B'].values
     dominated = False
-    for i in range(len(avt_vals)):
-        for j in range(len(avt_vals)):
-            if i != j and avt_vals[j] >= avt_vals[i] and jph_vals[j] >= jph_vals[i]:
-                if avt_vals[j] > avt_vals[i] or jph_vals[j] > jph_vals[i]:
+    for i in range(len(a_vals)):
+        for j in range(len(a_vals)):
+            if i != j and a_vals[j] >= a_vals[i] and b_vals[j] >= b_vals[i]:
+                if a_vals[j] > a_vals[i] or b_vals[j] > b_vals[i]:
                     dominated = True
                     break
         if dominated:
@@ -372,13 +376,13 @@ def run_pareto_optimization(
         print("\n⚠️  WARNING: Some solutions may still be dominated (increase restarts).")
     
     # Print top-5 designs
-    print("\n  TOP PARETO DESIGNS (by Jph):")
+    print("\n  TOP PARETO DESIGNS (by B):")
     print("-" * 70)
-    top5 = df_pareto.nlargest(5, 'Jph')
+    top5 = df_pareto.nlargest(5, 'B')
     d_cols = [f'd{i+1}' for i in range(num_layers)]
     for idx, row in top5.iterrows():
         d_str = ", ".join([f"{row[c]:.1f}" for c in d_cols])
-        print(f"  AVT={row['AVT']:5.2f}% | Jph={row['Jph']:5.2f} | CRI={row['CRI']:5.1f} | d=[{d_str}]")
+        print(f"  A={row['A']:5.2f}% | B={row['B']:5.2f} | CRI={row['CRI']:5.1f} | d=[{d_str}]")
     
     return df_all, df_pareto
 
@@ -399,10 +403,10 @@ def main():
                         help='Gradient descent steps per restart (default: 200)')
     parser.add_argument('--lr', type=float, default=2.0,
                         help='Adam learning rate (default: 2.0)')
-    parser.add_argument('--avt_min', type=float, default=None,
-                        help='Minimum AVT constraint (%%), e.g. 25')
-    parser.add_argument('--avt_max', type=float, default=None,
-                        help='Maximum AVT constraint (%%)')
+    parser.add_argument('--a_min', type=float, default=None,
+                        help='Minimum A constraint (%%), e.g. 25')
+    parser.add_argument('--a_max', type=float, default=None,
+                        help='Maximum A constraint (%%)')
     parser.add_argument('--cri_min', type=float, default=None,
                         help='Minimum CRI constraint, e.g. 80')
     parser.add_argument('--penalty_weight', type=float, default=20.0,
@@ -419,8 +423,8 @@ def main():
         num_restarts=args.num_restarts,
         steps=args.steps,
         lr=args.lr,
-        avt_min=args.avt_min,
-        avt_max=args.avt_max,
+        a_min=args.a_min,
+        a_max=args.a_max,
         cri_min=args.cri_min,
         penalty_weight=args.penalty_weight,
         output_dir=args.output_dir,

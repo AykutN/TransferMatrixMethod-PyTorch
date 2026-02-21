@@ -52,21 +52,21 @@ def setup_publication_style():
     })
 
 
-def find_knee_point(avt_vals, jph_vals):
+def find_knee_point(a_vals, b_vals):
     """
     Find the knee point of the Pareto front using the maximum distance
     from the line connecting the two extreme points.
     """
-    if len(avt_vals) < 3:
+    if len(a_vals) < 3:
         return 0
     
     # Normalize to [0,1] for fair distance comparison
-    avt_norm = (avt_vals - avt_vals.min()) / (avt_vals.max() - avt_vals.min() + 1e-12)
-    jph_norm = (jph_vals - jph_vals.min()) / (jph_vals.max() - jph_vals.min() + 1e-12)
+    a_norm = (a_vals - a_vals.min()) / (a_vals.max() - a_vals.min() + 1e-12)
+    b_norm = (b_vals - b_vals.min()) / (b_vals.max() - b_vals.min() + 1e-12)
     
-    # Line from first point to last point (in sorted order by AVT)
-    p1 = np.array([avt_norm[0], jph_norm[0]])
-    p2 = np.array([avt_norm[-1], jph_norm[-1]])
+    # Line from first point to last point (in sorted order by A)
+    p1 = np.array([a_norm[0], b_norm[0]])
+    p2 = np.array([a_norm[-1], b_norm[-1]])
     
     # Distance from each point to this line
     line_vec = p2 - p1
@@ -76,7 +76,7 @@ def find_knee_point(avt_vals, jph_vals):
         return 0
     
     distances = np.abs(
-        (p2[0] - p1[0]) * (p1[1] - jph_norm) - (p1[0] - avt_norm) * (p2[1] - p1[1])
+        (p2[0] - p1[0]) * (p1[1] - b_norm) - (p1[0] - a_norm) * (p2[1] - p1[1])
     ) / line_len
     
     return np.argmax(distances)
@@ -88,7 +88,7 @@ def plot_pareto_front(
     output_dir=None,
     show_all=True,
     show_knee=True,
-    avt_constraint=None,
+    a_constraint=None,
     figsize=(8, 6)
 ):
     """
@@ -100,7 +100,7 @@ def plot_pareto_front(
         output_dir: Output directory for figures
         show_all: Whether to show all tested designs as background
         show_knee: Whether to highlight the knee point
-        avt_constraint: If set, draws a vertical line at this AVT value
+        a_constraint: If set, draws a vertical line at this A value
         figsize: Figure size tuple
     """
     setup_publication_style()
@@ -116,28 +116,28 @@ def plot_pareto_front(
     
     # Load data
     df_pareto = pd.read_csv(pareto_csv)
-    df_pareto = df_pareto.sort_values('AVT').reset_index(drop=True)
+    df_pareto = df_pareto.sort_values('A').reset_index(drop=True)
     
     has_all = os.path.exists(all_csv) if show_all else False
     if has_all:
         df_all = pd.read_csv(all_csv)
     
     # ────────────────────────────────────────
-    #  FIGURE 1: Main Pareto Front (AVT vs Jph, CRI colored)
+    #  FIGURE 1: Main Pareto Front (A vs B, CRI colored)
     # ────────────────────────────────────────
     fig, ax = plt.subplots(figsize=figsize)
     
     # Background: all solutions
     if has_all:
         ax.scatter(
-            df_all['AVT'], df_all['Jph'],
+            df_all['A'], df_all['B'],
             c='#E0E0E0', s=20, alpha=0.4, zorder=1,
             label='All evaluated designs', edgecolors='none'
         )
     
     # Pareto front with CRI color coding
-    avt = df_pareto['AVT'].values
-    jph = df_pareto['Jph'].values
+    a = df_pareto['A'].values
+    b = df_pareto['B'].values
     cri = df_pareto['CRI'].values
     
     # Color map: CRI values
@@ -147,15 +147,15 @@ def plot_pareto_front(
     cmap = plt.cm.RdYlGn  # Red (low CRI) → Green (high CRI)
     
     # Plot Pareto line
-    sorted_idx = np.argsort(avt)
+    sorted_idx = np.argsort(a)
     ax.plot(
-        avt[sorted_idx], jph[sorted_idx],
+        a[sorted_idx], b[sorted_idx],
         color='#333333', linewidth=1.5, linestyle='--', alpha=0.6, zorder=2
     )
     
     # Plot Pareto points with CRI coloring
     scatter = ax.scatter(
-        avt, jph, c=cri, cmap=cmap, norm=norm,
+        a, b, c=cri, cmap=cmap, norm=norm,
         s=80, edgecolors='black', linewidths=0.8, zorder=3,
         label='Pareto-optimal designs'
     )
@@ -166,22 +166,22 @@ def plot_pareto_front(
     cbar.ax.tick_params(labelsize=10)
     
     # Knee point
-    if show_knee and len(avt) >= 3:
-        knee_idx = find_knee_point(avt[sorted_idx], jph[sorted_idx])
-        knee_avt = avt[sorted_idx][knee_idx]
-        knee_jph = jph[sorted_idx][knee_idx]
+    if show_knee and len(a) >= 3:
+        knee_idx = find_knee_point(a[sorted_idx], b[sorted_idx])
+        knee_a = a[sorted_idx][knee_idx]
+        knee_b = b[sorted_idx][knee_idx]
         knee_cri = cri[sorted_idx][knee_idx]
         
         ax.scatter(
-            knee_avt, knee_jph,
+            knee_a, knee_b,
             s=250, facecolors='none', edgecolors='#E63946', linewidths=2.5,
-            zorder=4, label=f'Knee point (AVT={knee_avt:.1f}%, Jph={knee_jph:.1f})'
+            zorder=4, label=f'Knee point (A={knee_a:.1f}%, B={knee_b:.1f})'
         )
         
         # Annotation
         ax.annotate(
-            f'Knee Point\nAVT={knee_avt:.1f}%\nJph={knee_jph:.1f}\nCRI={knee_cri:.0f}',
-            xy=(knee_avt, knee_jph),
+            f'Knee Point\nA={knee_a:.1f}%\nB={knee_b:.1f}\nCRI={knee_cri:.0f}',
+            xy=(knee_a, knee_b),
             xytext=(20, 25), textcoords='offset points',
             fontsize=9, ha='left',
             bbox=dict(boxstyle='round,pad=0.4', facecolor='white', edgecolor='#E63946', alpha=0.9),
@@ -189,20 +189,20 @@ def plot_pareto_front(
             zorder=5
         )
     
-    # AVT constraint line
-    if avt_constraint is not None:
+    # A constraint line
+    if a_constraint is not None:
         ax.axvline(
-            x=avt_constraint, color='#457B9D', linestyle=':', linewidth=1.5, alpha=0.7,
-            label=f'AVT ≥ {avt_constraint}% constraint'
+            x=a_constraint, color='#457B9D', linestyle=':', linewidth=1.5, alpha=0.7,
+            label=f'A ≥ {a_constraint}% constraint'
         )
-        ax.axvspan(avt_constraint, ax.get_xlim()[1], alpha=0.04, color='#457B9D')
+        ax.axvspan(a_constraint, ax.get_xlim()[1], alpha=0.04, color='#457B9D')
     
     # Trade-off arrow annotation
     mid_idx = len(sorted_idx) // 2
     if mid_idx > 0 and mid_idx < len(sorted_idx) - 1:
         ax.annotate(
-            '', xy=(avt[sorted_idx][-1], jph[sorted_idx][-1]),
-            xytext=(avt[sorted_idx][0], jph[sorted_idx][0]),
+            '', xy=(a[sorted_idx][-1], b[sorted_idx][-1]),
+            xytext=(a[sorted_idx][0], b[sorted_idx][0]),
             arrowprops=dict(
                 arrowstyle='<->', color='#6C757D', lw=1.2,
                 connectionstyle='arc3,rad=0.15'
@@ -210,15 +210,15 @@ def plot_pareto_front(
         )
         # Label the trade-off
         ax.text(
-            0.03, 0.03, 'Trade-off: ← Higher Jph    |    Higher AVT →',
+            0.03, 0.03, 'Trade-off: ← Higher B    |    Higher A →',
             transform=ax.transAxes, fontsize=9, color='#6C757D',
             style='italic', alpha=0.7,
             bbox=dict(facecolor='white', alpha=0.8, edgecolor='none')
         )
     
-    ax.set_xlabel('Average Visible Transmittance, AVT (%)', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Average Visible Transmittance, A (%)', fontsize=14, fontweight='bold')
     ax.set_ylabel('Photocurrent Density, J$_{ph}$ (mA/cm²)', fontsize=14, fontweight='bold')
-    ax.set_title('Pareto Front: AVT vs J$_{ph}$ Trade-off\n(Gradient-Based Multi-Objective Optimization)', fontsize=14)
+    ax.set_title('Pareto Front: A vs J$_{ph}$ Trade-off\n(Gradient-Based Multi-Objective Optimization)', fontsize=14)
     
     ax.xaxis.set_minor_locator(AutoMinorLocator())
     ax.yaxis.set_minor_locator(AutoMinorLocator())
@@ -228,8 +228,8 @@ def plot_pareto_front(
     fig.tight_layout()
     
     # Save
-    png_path = os.path.join(output_dir, 'pareto_front_avt_jph.png')
-    pdf_path = os.path.join(output_dir, 'pareto_front_avt_jph.pdf')
+    png_path = os.path.join(output_dir, 'pareto_front_a_b.png')
+    pdf_path = os.path.join(output_dir, 'pareto_front_a_b.pdf')
     fig.savefig(png_path, dpi=300, bbox_inches='tight')
     fig.savefig(pdf_path, bbox_inches='tight')
     plt.close(fig)
@@ -254,14 +254,14 @@ def plot_pareto_front(
         d_range[d_range == 0] = 1  # avoid div by zero
         d_norm = (d_data - d_min) / d_range
         
-        # Color by Jph
-        jph_norm = mcolors.Normalize(vmin=jph.min(), vmax=jph.max())
-        jph_cmap = plt.cm.plasma
+        # Color by B
+        b_norm = mcolors.Normalize(vmin=b.min(), vmax=b.max())
+        b_cmap = plt.cm.plasma
         
         x_coords = np.arange(num_layers)
         
         for i in range(len(df_pareto)):
-            color = jph_cmap(jph_norm(jph[i]))
+            color = b_cmap(b_norm(b[i]))
             ax2.plot(x_coords, d_norm[i], color=color, alpha=0.5, linewidth=1.0)
         
         # Add ticks with actual ranges
@@ -272,8 +272,8 @@ def plot_pareto_front(
         ax2.set_ylabel('Normalized Thickness', fontsize=12)
         ax2.set_title('Pareto-Optimal Design Space (Parallel Coordinates)', fontsize=14)
         
-        # Colorbar for Jph
-        sm = plt.cm.ScalarMappable(cmap=jph_cmap, norm=jph_norm)
+        # Colorbar for B
+        sm = plt.cm.ScalarMappable(cmap=b_cmap, norm=b_norm)
         sm.set_array([])
         cbar2 = plt.colorbar(sm, ax=ax2, shrink=0.85, pad=0.02)
         cbar2.set_label('J$_{ph}$ (mA/cm²)', fontsize=11)
@@ -290,31 +290,31 @@ def plot_pareto_front(
         print(f"  Figure saved → {pc_pdf}")
     
     # ────────────────────────────────────────
-    #  FIGURE 3: CRI vs AVT with Jph bubbles
+    #  FIGURE 3: CRI vs A with B bubbles
     # ────────────────────────────────────────
     fig3, ax3 = plt.subplots(figsize=(8, 6))
     
-    jph_sizes = 30 + 200 * (jph - jph.min()) / (jph.max() - jph.min() + 1e-12)
+    b_sizes = 30 + 200 * (b - b.min()) / (b.max() - b.min() + 1e-12)
     
     scatter3 = ax3.scatter(
-        avt, cri, s=jph_sizes, c=jph, cmap='viridis',
+        a, cri, s=b_sizes, c=b, cmap='viridis',
         edgecolors='black', linewidths=0.5, alpha=0.8
     )
     
     cbar3 = plt.colorbar(scatter3, ax=ax3, shrink=0.85, pad=0.02)
     cbar3.set_label('J$_{ph}$ (mA/cm²)', fontsize=12)
     
-    ax3.set_xlabel('Average Visible Transmittance, AVT (%)', fontsize=14, fontweight='bold')
+    ax3.set_xlabel('Average Visible Transmittance, A (%)', fontsize=14, fontweight='bold')
     ax3.set_ylabel('Color Rendering Index (CRI)', fontsize=14, fontweight='bold')
-    ax3.set_title('Pareto Designs: AVT vs CRI\n(Bubble size ~ J$_{ph}$)', fontsize=14)
+    ax3.set_title('Pareto Designs: A vs CRI\n(Bubble size ~ J$_{ph}$)', fontsize=14)
     
     ax3.xaxis.set_minor_locator(AutoMinorLocator())
     ax3.yaxis.set_minor_locator(AutoMinorLocator())
     
     fig3.tight_layout()
     
-    bubble_png = os.path.join(output_dir, 'pareto_avt_cri_bubble.png')
-    bubble_pdf = os.path.join(output_dir, 'pareto_avt_cri_bubble.pdf')
+    bubble_png = os.path.join(output_dir, 'pareto_a_cri_bubble.png')
+    bubble_pdf = os.path.join(output_dir, 'pareto_a_cri_bubble.pdf')
     fig3.savefig(bubble_png, dpi=300, bbox_inches='tight')
     fig3.savefig(bubble_pdf, bbox_inches='tight')
     plt.close(fig3)
@@ -333,8 +333,8 @@ def main():
                         help='Path to all solutions CSV')
     parser.add_argument('--output_dir', type=str, default=None,
                         help='Output directory for figures')
-    parser.add_argument('--avt_constraint', type=float, default=25.0,
-                        help='Draw AVT constraint line at this value (default: 25)')
+    parser.add_argument('--a_constraint', type=float, default=25.0,
+                        help='Draw A constraint line at this value (default: 25)')
     parser.add_argument('--no_all', action='store_true',
                         help='Do not show background scatter of all solutions')
     parser.add_argument('--no_knee', action='store_true',
@@ -348,7 +348,7 @@ def main():
         output_dir=args.output_dir,
         show_all=not args.no_all,
         show_knee=not args.no_knee,
-        avt_constraint=args.avt_constraint,
+        a_constraint=args.a_constraint,
     )
 
 

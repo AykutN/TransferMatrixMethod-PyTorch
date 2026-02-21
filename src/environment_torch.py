@@ -44,15 +44,15 @@ class Env():
         # We will use property getters or just set attributes effectively.
         self._update_attributes()
         
-        self.avt_value, self.jph_value = self._get_location(*self.d_values)
+        self.A_value, self.B_value = self._get_location(*self.d_values)
         self.max_steps = config.MAX_STEPS
         self.action_space = self._generate_action_space()
         self.n_actions = len(self.action_space)                                     
-        self.highest_avt = self.avt_value
-        self.highest_jph = self.jph_value
+        self.highest_A = self.A_value
+        self.highest_B = self.B_value
         self.current_step = 0
-        self.previous_avt = self.avt_value
-        self.previous_jph = self.jph_value
+        self.previous_A = self.A_value
+        self.previous_B = self.B_value
         
         # Extended metrics initialized by _get_location
         # self.cri_value, self.x_value, self.y_value are now available
@@ -81,12 +81,12 @@ class Env():
 
     def _get_location(self, *d_vals):
         # Call PyTorch TMM
-        # Returns: AVT, Jph, CRI_ext, x_cr, y_cr
-        avt, jph, cri, x, y = self.tmm.forward(*d_vals)
+        # Returns: A, B, CRI_ext, x_cr, y_cr
+        AVT, Jph, cri, x, y = self.tmm.forward(*d_vals)
         
         # Convert to python floats
-        if hasattr(avt, 'item'): avt = avt.item()
-        if hasattr(jph, 'item'): jph = jph.item()
+        if hasattr(AVT, 'item'): AVT = AVT.item()
+        if hasattr(Jph, 'item'): Jph = Jph.item()
         if hasattr(cri, 'item'): cri = cri.item()
         if hasattr(x, 'item'): x = x.item()
         if hasattr(y, 'item'): y = y.item()
@@ -95,8 +95,10 @@ class Env():
         self.cri_value = cri
         self.x_value = x
         self.y_value = y
+        self.AVT_value = AVT
+        self.Jph_value = Jph
         
-        return avt, jph
+        return AVT, Jph
 
     def reset(self):
         # Random initialization
@@ -110,18 +112,18 @@ class Env():
         self._update_attributes()
         
         self.current_step = 0
-        self.avt_value, self.jph_value = self._get_location(*self.d_values)
-        self.highest_avt = self.avt_value
-        self.highest_jph = self.jph_value
-        self.previous_avt = self.avt_value
-        self.previous_jph = self.jph_value
+        self.A_value, self.B_value = self._get_location(*self.d_values)
+        self.highest_A = self.A_value
+        self.highest_B = self.B_value
+        self.previous_A = self.A_value
+        self.previous_B = self.B_value
         
         return self._get_state()
 
     def step(self, action_idx):
         self.current_step += 1
         category, action = self.action_space[action_idx] # e.g. "d1", "forward"
-        self.previous_avt, self.previous_jph = self.avt_value, self.jph_value
+        self.previous_A, self.previous_B = self.A_value, self.B_value
         
         # Parse category index (d1 -> 0, d2 -> 1)
         idx = int(category.replace('d', '')) - 1
@@ -147,33 +149,19 @@ class Env():
         self._update_attributes()
 
         # Recalculate physics
-        self.avt_value, self.jph_value = self._get_location(*self.d_values)
+        self.A_value, self.B_value = self._get_location(*self.d_values)
         
         # Update tracks
-        if self.avt_value > self.highest_avt: self.highest_avt = self.avt_value
-        if self.jph_value > self.highest_jph: self.highest_jph = self.jph_value
+        if self.A_value > self.highest_A: self.highest_A = self.A_value
+        if self.B_value > self.highest_B: self.highest_B = self.B_value
 
         # Calculate Reward (Same logic as original)
         reward = 0
         
-        if self.avt_value > 25:
-            reward += 70
-        
-        if 25 <= self.avt_value <= 27:
-            reward += 150
+        if self.A_value > self.previous_A:
+            reward += 5
         else:
-            reward -= 50
-
-        if self.jph_value > self.previous_jph:
-            reward += 20
-        else:
-            reward -= 15
-
-        if 25 <= self.avt_value <= 27 and self.jph_value > self.previous_jph:
-            reward += 300
-            
-        if 25 <= self.previous_avt <= 27 and 25 <= self.avt_value <= 27:
-            reward += 250
+            reward -= 5
  
         reward += penalty
         
